@@ -417,7 +417,7 @@ if check_password():
     cover_photo = None
     photo_fill = False
     if include_cover:
-        cover_title = st.text_input("Cover page title", value="ACTIVITY BOOK")
+        cover_title = f"{theme_choice.upper()} WORD SEARCH" if theme_choice in WORD_THEMES else "WORD SEARCH PUZZLES"
 
         with st.expander("Need cover art? Generate a free AI image prompt"):
             cover_prompt = build_cover_prompt(cover_title, theme_choice, page_w, page_h)
