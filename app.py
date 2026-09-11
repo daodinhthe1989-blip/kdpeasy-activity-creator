@@ -32,7 +32,7 @@ PAGE_SIZES = {
 # Fixed high-contrast look, optimized for black & white KDP interior printing
 # (color themes were removed — a colored title band just turns into a gray
 # block once printed in B&W, which is how nearly every word search book ships).
-THEME = {"primary": (0, 0, 0), "grid": (209, 213, 219), "text": (31, 41, 55)}
+THEME = {"primary": (0, 0, 0), "text": (17, 17, 17)}
 
 CUSTOM_CSS = """
 <style>
@@ -168,19 +168,17 @@ def generate_word_search(words, grid_size, hard_mode=False, max_attempts=300):
 def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, show_solution, placements):
     primary = theme["primary"]
     text_color = theme["text"]
-    grid_color = theme["grid"]
 
     pdf.add_page()
-    pdf.set_line_width(0.01)
-    pdf.set_fill_color(*primary)
-    pdf.rect(MARGIN, MARGIN, page_w - 2 * MARGIN, TITLE_H, "F")
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 16 if page_w < 7 else 20)
+    content_w = page_w - 2 * MARGIN
+
+    # Plain centered title, no colored band (matches the reference layout)
+    pdf.set_text_color(*text_color)
+    pdf.set_font("Helvetica", "B", 22 if page_w >= 7 else 18)
     pdf.set_xy(MARGIN, MARGIN)
-    pdf.cell(page_w - 2 * MARGIN, TITLE_H, title, align="C")
+    pdf.cell(content_w, TITLE_H, title, align="C")
 
     grid_size = len(grid)
-    content_w = page_w - 2 * MARGIN
     cell = content_w / grid_size
     grid_top = MARGIN + TITLE_H + GAP
 
@@ -193,27 +191,41 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
                 y = grid_top + r * cell
                 pdf.rect(x, y, cell, cell, "F")
 
+    # Plain letters, no per-cell grid lines (matches the reference layout)
     font_size = max(8, min(20, cell * 45))
-    pdf.set_draw_color(*grid_color)
     pdf.set_font("Helvetica", "B", font_size)
     pdf.set_text_color(*text_color)
     for r in range(grid_size):
         for c in range(grid_size):
             x = MARGIN + c * cell
             y = grid_top + r * cell
-            pdf.rect(x, y, cell, cell, "D")
             pdf.set_xy(x, y + cell * 0.2)
             pdf.cell(cell, cell * 0.6, grid[r][c], align="C")
 
-    list_top = grid_top + grid_size * cell + 0.2
-    pdf.set_text_color(*primary)
+    # Word bank: alphabetical, filled column-by-column (top-to-bottom, then next column)
+    list_top = grid_top + grid_size * cell + GAP * 2
+    words_sorted = sorted(word_list)
+    n = len(words_sorted)
+    num_cols = max(2, min(4, -(-n // 5)))
+    num_rows = -(-n // num_cols)
+    row_h = 0.26
+
     pdf.set_font("Helvetica", "B", 11)
-    pdf.set_xy(MARGIN, list_top)
-    pdf.cell(content_w, 0.25, "Find these words:", align="L")
     pdf.set_text_color(*text_color)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.set_xy(MARGIN, list_top + 0.28)
-    pdf.multi_cell(content_w, 0.22, "   ".join(word_list), align="L")
+    # Size columns to the longest word instead of stretching across the full
+    # page width, then center the block — keeps short word lists tight
+    # instead of spreading them out with a big gap in the middle.
+    max_word_w = max((pdf.get_string_width(w) for w in words_sorted), default=0)
+    col_w = min(content_w / num_cols, max_word_w + 0.35)
+    total_w = col_w * num_cols
+    start_x = MARGIN + (content_w - total_w) / 2
+
+    for i, word in enumerate(words_sorted):
+        col, row = divmod(i, num_rows)
+        x = start_x + col * col_w
+        y = list_top + row * row_h
+        pdf.set_xy(x, y)
+        pdf.cell(col_w, row_h, word, align="C")
 
 
 # ---------- Assembler ----------
@@ -256,7 +268,7 @@ def build_activity_pdf(page_w, page_h, theme,
         grid, placements, skipped = generate_word_search(pool, ws_grid_size, ws_hard_mode)
         used_words = sorted({w.strip().upper().replace(" ", "") for w in pool} & set(placements.keys()))
         ws_puzzles.append((grid, used_words, placements))
-        draw_word_search_page(pdf, page_w, page_h, theme, f"Word Search #{i + 1}", grid, used_words, False, {})
+        draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + 1}", grid, used_words, False, {})
 
     if show_answers and ws_puzzles:
         pdf.add_page()
@@ -268,7 +280,7 @@ def build_activity_pdf(page_w, page_h, theme,
         pdf.cell(page_w - 0.6, 0.6, "ANSWER KEY", align="C")
 
         for i, (grid, used_words, placements) in enumerate(ws_puzzles):
-            draw_word_search_page(pdf, page_w, page_h, theme, f"Word Search #{i + 1} - Answer", grid, used_words, True, placements)
+            draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + 1} - ANSWER", grid, used_words, True, placements)
 
     pdf_bytes = pdf.output()
     return BytesIO(bytes(pdf_bytes))
