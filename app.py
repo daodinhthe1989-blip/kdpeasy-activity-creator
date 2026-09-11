@@ -28,12 +28,11 @@ PAGE_SIZES = {
     "A5": (5.83, 8.27),
 }
 
-THEMES = {
-    "Indigo Classic": {"primary": (79, 70, 229), "grid": (209, 213, 219), "text": (31, 41, 55)},
-    "Emerald Fresh":  {"primary": (16, 185, 129), "grid": (209, 213, 219), "text": (31, 41, 55)},
-    "Sunset Warm":    {"primary": (234, 88, 12),  "grid": (209, 213, 219), "text": (31, 41, 55)},
-    "Mono Minimal":   {"primary": (31, 41, 55),   "grid": (209, 213, 219), "text": (31, 41, 55)},
-}
+
+# Fixed high-contrast look, optimized for black & white KDP interior printing
+# (color themes were removed — a colored title band just turns into a gray
+# block once printed in B&W, which is how nearly every word search book ships).
+THEME = {"primary": (0, 0, 0), "grid": (209, 213, 219), "text": (31, 41, 55)}
 
 CUSTOM_CSS = """
 <style>
@@ -86,11 +85,6 @@ def check_password() -> bool:
             st.error("Incorrect password.")
     st.markdown('</div>', unsafe_allow_html=True)
     return False
-
-
-def hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
 
 
 def tint_toward_white(color, amount=0.85):
@@ -288,21 +282,10 @@ if check_password():
     col1, col2 = st.columns(2)
     with col1:
         page_size_label = st.selectbox("Page size", list(PAGE_SIZES.keys()))
-        orientation = st.radio("Orientation", ["Portrait", "Landscape"], index=0, horizontal=True)
     with col2:
-        theme_mode = st.radio("Color theme", ["Preset", "Custom color"], index=0, horizontal=True)
-        if theme_mode == "Preset":
-            theme_name = st.selectbox("Choose a preset", list(THEMES.keys()))
-            theme = THEMES[theme_name]
-        else:
-            custom_hex = st.color_picker("Pick any color", "#4f46e5")
-            primary_rgb = hex_to_rgb(custom_hex)
-            theme = {
-                "primary": primary_rgb,
-                "grid": (209, 213, 219),
-                "text": (31, 41, 55),
-            }
+        orientation = st.radio("Orientation", ["Portrait", "Landscape"], index=0, horizontal=True)
 
+    theme = THEME
     page_w, page_h = PAGE_SIZES[page_size_label]
     if orientation == "Landscape":
         page_w, page_h = page_h, page_w
