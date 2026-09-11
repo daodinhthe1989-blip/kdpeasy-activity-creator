@@ -417,7 +417,9 @@ if check_password():
     if orientation == "Landscape":
         page_w, page_h = page_h, page_w
 
-    theme_choice = st.selectbox("Word theme", ["Custom (type your own)"] + list(WORD_THEMES.keys()))
+    theme_choice = st.selectbox(
+        "Word theme", ["Custom (type your own)"] + list(WORD_THEMES.keys()), index=1,
+    )
 
     include_cover = st.checkbox("Include a cover page", value=True)
     cover_title = ""
@@ -471,43 +473,46 @@ if check_password():
 
     export_png = st.checkbox("Also export as PNG images (zipped, 300 DPI)", value=False)
 
-    if bank_preview and st.button("Generate Activity Book PDF"):
-        pdf_buf = build_activity_pdf(
-            page_w, page_h, theme,
-            include_cover, cover_title, cover_photo, photo_fill,
-            ws_word_bank, int(ws_num_puzzles), int(ws_words_per_puzzle), int(ws_grid_size), ws_hard_mode,
-            show_answers,
-        )
-        pdf_bytes = pdf_buf.getvalue()
-        st.success("Your activity book is ready! Here's a preview before you download:")
+    if st.button("Generate Activity Book PDF"):
+        if not bank_preview:
+            st.error("Please add at least one word to the word bank above before generating.")
+        else:
+            pdf_buf = build_activity_pdf(
+                page_w, page_h, theme,
+                include_cover, cover_title, cover_photo, photo_fill,
+                ws_word_bank, int(ws_num_puzzles), int(ws_words_per_puzzle), int(ws_grid_size), ws_hard_mode,
+                show_answers,
+            )
+            pdf_bytes = pdf_buf.getvalue()
+            st.success("Your activity book is ready! Here's a preview before you download:")
 
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        preview_count = min(2, doc.page_count)
-        preview_cols = st.columns(preview_count)
-        for i in range(preview_count):
-            pix = doc[i].get_pixmap(dpi=110)
-            preview_cols[i].image(pix.tobytes("png"), caption=f"Page {i + 1}", use_container_width=True)
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            preview_count = min(2, doc.page_count)
+            preview_cols = st.columns(preview_count)
+            for i in range(preview_count):
+                pix = doc[i].get_pixmap(dpi=110)
+                preview_cols[i].image(pix.tobytes("png"), caption=f"Page {i + 1}", use_container_width=True)
 
-        st.download_button(
-            "⬇️ Download Activity Book PDF",
-            data=pdf_bytes,
-            file_name="KDPEasy_Word_Search_Book.pdf",
-            mime="application/pdf",
-        )
-
-        if export_png:
-            zip_buf = BytesIO()
-            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                for i in range(doc.page_count):
-                    pix = doc[i].get_pixmap(dpi=300)
-                    zf.writestr(f"{i + 1:04d}.png", pix.tobytes("png"))
-            zip_buf.seek(0)
             st.download_button(
-                "⬇️ Download PNG Images (ZIP, 300 DPI)",
-                data=zip_buf,
-                file_name="KDPEasy_Word_Search_Book_PNG.zip",
-                mime="application/zip",
+                "⬇️ Download Activity Book PDF",
+                data=pdf_bytes,
+                file_name="KDPEasy_Word_Search_Book.pdf",
+                mime="application/pdf",
             )
 
-        doc.close()
+            if export_png:
+                zip_buf = BytesIO()
+                with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for i in range(doc.page_count):
+                        pix = doc[i].get_pixmap(dpi=300)
+                        zf.writestr(f"{i + 1:04d}.png", pix.tobytes("png"))
+                zip_buf.seek(0)
+                st.download_button(
+                    "⬇️ Download PNG Images (ZIP, 300 DPI)",
+                    data=zip_buf,
+                    file_name="KDPEasy_Word_Search_Book_PNG.zip",
+                    mime="application/zip",
+                )
+
+            doc.close()
     st.markdown('</div>', unsafe_allow_html=True)
