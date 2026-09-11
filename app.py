@@ -3,7 +3,6 @@ import fitz
 import zipfile
 import random
 import string
-from collections import deque
 from datetime import date
 from fpdf import FPDF
 from io import BytesIO
@@ -30,10 +29,10 @@ PAGE_SIZES = {
 }
 
 THEMES = {
-    "Indigo Classic": {"primary": (79, 70, 229), "weekend": (238, 242, 255), "grid": (209, 213, 219), "text": (31, 41, 55)},
-    "Emerald Fresh":  {"primary": (16, 185, 129), "weekend": (209, 250, 229), "grid": (209, 213, 219), "text": (31, 41, 55)},
-    "Sunset Warm":    {"primary": (234, 88, 12),  "weekend": (255, 237, 213), "grid": (209, 213, 219), "text": (31, 41, 55)},
-    "Mono Minimal":   {"primary": (31, 41, 55),   "weekend": (243, 244, 246), "grid": (209, 213, 219), "text": (31, 41, 55)},
+    "Indigo Classic": {"primary": (79, 70, 229), "grid": (209, 213, 219), "text": (31, 41, 55)},
+    "Emerald Fresh":  {"primary": (16, 185, 129), "grid": (209, 213, 219), "text": (31, 41, 55)},
+    "Sunset Warm":    {"primary": (234, 88, 12),  "grid": (209, 213, 219), "text": (31, 41, 55)},
+    "Mono Minimal":   {"primary": (31, 41, 55),   "grid": (209, 213, 219), "text": (31, 41, 55)},
 }
 
 CUSTOM_CSS = """
@@ -223,202 +222,11 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
     pdf.multi_cell(content_w, 0.22, "   ".join(word_list), align="L")
 
 
-# ---------- Sudoku ----------
-
-SUDOKU_REMOVE = {"Easy": 36, "Medium": 46, "Hard": 54}
-
-
-def generate_full_sudoku():
-    grid = [[0] * 9 for _ in range(9)]
-
-    def is_valid(r, c, val):
-        for i in range(9):
-            if grid[r][i] == val or grid[i][c] == val:
-                return False
-        br, bc = 3 * (r // 3), 3 * (c // 3)
-        for i in range(br, br + 3):
-            for j in range(bc, bc + 3):
-                if grid[i][j] == val:
-                    return False
-        return True
-
-    def solve(pos=0):
-        if pos == 81:
-            return True
-        r, c = divmod(pos, 9)
-        nums = list(range(1, 10))
-        random.shuffle(nums)
-        for num in nums:
-            if is_valid(r, c, num):
-                grid[r][c] = num
-                if solve(pos + 1):
-                    return True
-                grid[r][c] = 0
-        return False
-
-    solve()
-    return grid
-
-
-def make_sudoku_puzzle(full_grid, difficulty):
-    puzzle = [row[:] for row in full_grid]
-    cells = [(r, c) for r in range(9) for c in range(9)]
-    random.shuffle(cells)
-    for r, c in cells[:SUDOKU_REMOVE.get(difficulty, 46)]:
-        puzzle[r][c] = 0
-    return puzzle
-
-
-def draw_sudoku_page(pdf, page_w, page_h, theme, title, grid):
-    primary = theme["primary"]
-    text_color = theme["text"]
-
-    pdf.add_page()
-    pdf.set_line_width(0.01)
-    pdf.set_fill_color(*primary)
-    pdf.rect(MARGIN, MARGIN, page_w - 2 * MARGIN, TITLE_H, "F")
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 16 if page_w < 7 else 20)
-    pdf.set_xy(MARGIN, MARGIN)
-    pdf.cell(page_w - 2 * MARGIN, TITLE_H, title, align="C")
-
-    content_w = page_w - 2 * MARGIN
-    avail_h = page_h - MARGIN - (MARGIN + TITLE_H + GAP)
-    size = min(content_w, avail_h)
-    cell = size / 9
-    x0 = MARGIN + (content_w - size) / 2
-    y0 = MARGIN + TITLE_H + GAP
-
-    pdf.set_text_color(*text_color)
-    pdf.set_font("Helvetica", "", max(10, min(20, cell * 45)))
-    for r in range(9):
-        for c in range(9):
-            x = x0 + c * cell
-            y = y0 + r * cell
-            pdf.set_draw_color(180, 180, 180)
-            pdf.set_line_width(0.008)
-            pdf.rect(x, y, cell, cell, "D")
-            val = grid[r][c]
-            if val:
-                pdf.set_xy(x, y + cell * 0.18)
-                pdf.cell(cell, cell * 0.6, str(val), align="C")
-
-    pdf.set_draw_color(*primary)
-    pdf.set_line_width(0.03)
-    for i in range(0, 10, 3):
-        pdf.line(x0 + i * cell, y0, x0 + i * cell, y0 + size)
-        pdf.line(x0, y0 + i * cell, x0 + size, y0 + i * cell)
-    pdf.set_line_width(0.01)
-
-
-# ---------- Maze ----------
-
-MAZE_DIRS = [("N", 0, -1), ("S", 0, 1), ("E", 1, 0), ("W", -1, 0)]
-MAZE_OPPOSITE = {"N": "S", "S": "N", "E": "W", "W": "E"}
-MAZE_SIZES = {"Small": (10, 10), "Medium": (15, 15), "Large": (20, 20)}
-
-
-def generate_maze(width, height):
-    walls = {(x, y): {"N": True, "S": True, "E": True, "W": True} for x in range(width) for y in range(height)}
-    visited = {(0, 0)}
-    stack = [(0, 0)]
-    while stack:
-        x, y = stack[-1]
-        dirs = MAZE_DIRS[:]
-        random.shuffle(dirs)
-        moved = False
-        for d, dx, dy in dirs:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in visited:
-                walls[(x, y)][d] = False
-                walls[(nx, ny)][MAZE_OPPOSITE[d]] = False
-                visited.add((nx, ny))
-                stack.append((nx, ny))
-                moved = True
-                break
-        if not moved:
-            stack.pop()
-    walls[(0, 0)]["W"] = False
-    walls[(width - 1, height - 1)]["E"] = False
-    return walls
-
-
-def solve_maze(walls, width, height):
-    start, end = (0, 0), (width - 1, height - 1)
-    queue = deque([start])
-    came_from = {start: None}
-    while queue:
-        cur = queue.popleft()
-        if cur == end:
-            break
-        x, y = cur
-        for d, dx, dy in MAZE_DIRS:
-            nxt = (x + dx, y + dy)
-            if not walls[(x, y)][d] and 0 <= nxt[0] < width and 0 <= nxt[1] < height:
-                if nxt not in came_from:
-                    came_from[nxt] = cur
-                    queue.append(nxt)
-    path = []
-    cur = end
-    while cur is not None:
-        path.append(cur)
-        cur = came_from.get(cur)
-    path.reverse()
-    return path
-
-
-def draw_maze_page(pdf, page_w, page_h, theme, title, walls, width, height, solution_path=None):
-    primary = theme["primary"]
-
-    pdf.add_page()
-    pdf.set_line_width(0.02)
-    pdf.set_fill_color(*primary)
-    pdf.rect(MARGIN, MARGIN, page_w - 2 * MARGIN, TITLE_H, "F")
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 16 if page_w < 7 else 20)
-    pdf.set_xy(MARGIN, MARGIN)
-    pdf.cell(page_w - 2 * MARGIN, TITLE_H, title, align="C")
-
-    content_w = page_w - 2 * MARGIN
-    avail_h = page_h - MARGIN - (MARGIN + TITLE_H + GAP)
-    cell = min(content_w / width, avail_h / height)
-    maze_w = cell * width
-    maze_h = cell * height
-    x0 = MARGIN + (content_w - maze_w) / 2
-    y0 = MARGIN + TITLE_H + GAP
-
-    pdf.set_draw_color(31, 41, 55)
-    pdf.set_line_width(0.02)
-    for x in range(width):
-        for y in range(height):
-            cx = x0 + x * cell
-            cy = y0 + y * cell
-            w = walls[(x, y)]
-            if w["N"]:
-                pdf.line(cx, cy, cx + cell, cy)
-            if w["S"]:
-                pdf.line(cx, cy + cell, cx + cell, cy + cell)
-            if w["W"]:
-                pdf.line(cx, cy, cx, cy + cell)
-            if w["E"]:
-                pdf.line(cx + cell, cy, cx + cell, cy + cell)
-
-    if solution_path:
-        pdf.set_draw_color(*primary)
-        pdf.set_line_width(0.03)
-        pts = [(x0 + (x + 0.5) * cell, y0 + (y + 0.5) * cell) for x, y in solution_path]
-        for i in range(len(pts) - 1):
-            pdf.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1])
-    pdf.set_line_width(0.01)
-
-
 # ---------- Assembler ----------
 
 def build_activity_pdf(page_w, page_h, theme,
                         include_cover, cover_title, cover_photo, photo_fill,
-                        ws_enabled, ws_word_bank, ws_num_puzzles, ws_words_per_puzzle, ws_grid_size, ws_hard_mode,
-                        su_enabled, su_num_puzzles, su_difficulty,
-                        mz_enabled, mz_num_mazes, mz_size,
+                        ws_word_bank, ws_num_puzzles, ws_words_per_puzzle, ws_grid_size, ws_hard_mode,
                         show_answers):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
@@ -447,34 +255,16 @@ def build_activity_pdf(page_w, page_h, theme,
             pdf.set_xy(0.3, page_h / 2 - 0.5)
             pdf.multi_cell(page_w - 0.6, 0.55, cover_title, align="C")
 
+    bank = [w.strip() for w in ws_word_bank.replace(",", "\n").splitlines() if w.strip()]
     ws_puzzles = []
-    if ws_enabled:
-        bank = [w.strip() for w in ws_word_bank.replace(",", "\n").splitlines() if w.strip()]
-        for i in range(ws_num_puzzles):
-            pool = bank if len(bank) <= ws_words_per_puzzle else random.sample(bank, ws_words_per_puzzle)
-            grid, placements, skipped = generate_word_search(pool, ws_grid_size, ws_hard_mode)
-            used_words = sorted({w.strip().upper().replace(" ", "") for w in pool} & set(placements.keys()))
-            ws_puzzles.append((grid, used_words, placements))
-            draw_word_search_page(pdf, page_w, page_h, theme, f"Word Search #{i + 1}", grid, used_words, False, {})
+    for i in range(ws_num_puzzles):
+        pool = bank if len(bank) <= ws_words_per_puzzle else random.sample(bank, ws_words_per_puzzle)
+        grid, placements, skipped = generate_word_search(pool, ws_grid_size, ws_hard_mode)
+        used_words = sorted({w.strip().upper().replace(" ", "") for w in pool} & set(placements.keys()))
+        ws_puzzles.append((grid, used_words, placements))
+        draw_word_search_page(pdf, page_w, page_h, theme, f"Word Search #{i + 1}", grid, used_words, False, {})
 
-    su_puzzles = []
-    if su_enabled:
-        for i in range(su_num_puzzles):
-            full = generate_full_sudoku()
-            puzzle = make_sudoku_puzzle(full, su_difficulty)
-            su_puzzles.append((puzzle, full))
-            draw_sudoku_page(pdf, page_w, page_h, theme, f"Sudoku #{i + 1} ({su_difficulty})", puzzle)
-
-    mz_puzzles = []
-    if mz_enabled:
-        dims = MAZE_SIZES[mz_size]
-        for i in range(mz_num_mazes):
-            walls = generate_maze(*dims)
-            path = solve_maze(walls, *dims)
-            mz_puzzles.append((walls, path, dims))
-            draw_maze_page(pdf, page_w, page_h, theme, f"Maze #{i + 1}", walls, *dims)
-
-    if show_answers and (ws_puzzles or su_puzzles or mz_puzzles):
+    if show_answers and ws_puzzles:
         pdf.add_page()
         pdf.set_fill_color(*primary)
         pdf.rect(0, 0, page_w, page_h, "F")
@@ -485,10 +275,6 @@ def build_activity_pdf(page_w, page_h, theme,
 
         for i, (grid, used_words, placements) in enumerate(ws_puzzles):
             draw_word_search_page(pdf, page_w, page_h, theme, f"Word Search #{i + 1} - Answer", grid, used_words, True, placements)
-        for i, (puzzle, full) in enumerate(su_puzzles):
-            draw_sudoku_page(pdf, page_w, page_h, theme, f"Sudoku #{i + 1} - Answer", full)
-        for i, (walls, path, dims) in enumerate(mz_puzzles):
-            draw_maze_page(pdf, page_w, page_h, theme, f"Maze #{i + 1} - Answer", walls, *dims, solution_path=path)
 
     pdf_bytes = pdf.output()
     return BytesIO(bytes(pdf_bytes))
@@ -497,7 +283,7 @@ def build_activity_pdf(page_w, page_h, theme,
 if check_password():
     st.markdown('<div class="kdp-card">', unsafe_allow_html=True)
     st.title("🧩 KDPEasy Activity Creator")
-    st.caption("Create a print-ready activity book (Word Search, Sudoku, Maze) for KDP in seconds.")
+    st.caption("Create a print-ready Word Search activity book for KDP in seconds.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -513,7 +299,6 @@ if check_password():
             primary_rgb = hex_to_rgb(custom_hex)
             theme = {
                 "primary": primary_rgb,
-                "weekend": tint_toward_white(primary_rgb, 0.85),
                 "grid": (209, 213, 219),
                 "text": (31, 41, 55),
             }
@@ -542,53 +327,29 @@ if check_password():
 
     show_answers = st.checkbox("Include an answer key section at the end", value=True)
 
-    st.markdown("### Word Search")
-    ws_enabled = st.checkbox("Include Word Search puzzles", value=True)
-    ws_word_bank, ws_num_puzzles, ws_words_per_puzzle, ws_grid_size, ws_hard_mode = "", 0, 0, 15, False
-    if ws_enabled:
-        ws_word_bank = st.text_area("Word bank (one word per line, or comma-separated)", height=100,
-                                     placeholder="LION\nTIGER\nELEPHANT\nGIRAFFE\nZEBRA")
-        wc1, wc2, wc3 = st.columns(3)
-        with wc1:
-            ws_num_puzzles = st.number_input("Number of puzzles", min_value=1, max_value=20, value=3)
-        with wc2:
-            ws_words_per_puzzle = st.number_input("Words per puzzle", min_value=5, max_value=20, value=10)
-        with wc3:
-            ws_grid_size = st.selectbox("Grid size", [12, 15, 18], index=1)
-        ws_hard_mode = st.checkbox("Harder mode (backwards + diagonal words)", value=False)
+    st.markdown("### Word Search settings")
+    ws_word_bank = st.text_area("Word bank (one word per line, or comma-separated)", height=100,
+                                 placeholder="LION\nTIGER\nELEPHANT\nGIRAFFE\nZEBRA")
+    wc1, wc2, wc3 = st.columns(3)
+    with wc1:
+        ws_num_puzzles = st.number_input("Number of puzzles", min_value=1, max_value=20, value=3)
+    with wc2:
+        ws_words_per_puzzle = st.number_input("Words per puzzle", min_value=5, max_value=20, value=10)
+    with wc3:
+        ws_grid_size = st.selectbox("Grid size", [12, 15, 18], index=1)
+    ws_hard_mode = st.checkbox("Harder mode (backwards + diagonal words)", value=False)
 
-    st.markdown("### Sudoku")
-    su_enabled = st.checkbox("Include Sudoku puzzles", value=True)
-    su_num_puzzles, su_difficulty = 0, "Medium"
-    if su_enabled:
-        sc1, sc2 = st.columns(2)
-        with sc1:
-            su_num_puzzles = st.number_input("Number of Sudoku puzzles", min_value=1, max_value=30, value=5)
-        with sc2:
-            su_difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1)
-
-    st.markdown("### Maze")
-    mz_enabled = st.checkbox("Include Mazes", value=True)
-    mz_num_mazes, mz_size = 0, "Medium"
-    if mz_enabled:
-        mc1, mc2 = st.columns(2)
-        with mc1:
-            mz_num_mazes = st.number_input("Number of mazes", min_value=1, max_value=20, value=3)
-        with mc2:
-            mz_size = st.selectbox("Maze size", list(MAZE_SIZES.keys()), index=1)
-
-    if not (ws_enabled or su_enabled or mz_enabled):
-        st.warning("Please enable at least one activity type (Word Search, Sudoku, or Maze).")
+    bank_preview = [w.strip() for w in ws_word_bank.replace(",", "\n").splitlines() if w.strip()]
+    if not bank_preview:
+        st.warning("Add at least one word to the word bank to generate a puzzle.")
 
     export_png = st.checkbox("Also export as PNG images (zipped, 300 DPI)", value=False)
 
-    if (ws_enabled or su_enabled or mz_enabled) and st.button("Generate Activity Book PDF"):
+    if bank_preview and st.button("Generate Activity Book PDF"):
         pdf_buf = build_activity_pdf(
             page_w, page_h, theme,
             include_cover, cover_title, cover_photo, photo_fill,
-            ws_enabled, ws_word_bank, int(ws_num_puzzles), int(ws_words_per_puzzle), int(ws_grid_size), ws_hard_mode,
-            su_enabled, int(su_num_puzzles), su_difficulty,
-            mz_enabled, int(mz_num_mazes), mz_size,
+            ws_word_bank, int(ws_num_puzzles), int(ws_words_per_puzzle), int(ws_grid_size), ws_hard_mode,
             show_answers,
         )
         pdf_bytes = pdf_buf.getvalue()
@@ -604,7 +365,7 @@ if check_password():
         st.download_button(
             "⬇️ Download Activity Book PDF",
             data=pdf_bytes,
-            file_name="KDPEasy_Activity_Book.pdf",
+            file_name="KDPEasy_Word_Search_Book.pdf",
             mime="application/pdf",
         )
 
@@ -618,7 +379,7 @@ if check_password():
             st.download_button(
                 "⬇️ Download PNG Images (ZIP, 300 DPI)",
                 data=zip_buf,
-                file_name="KDPEasy_Activity_Book_PNG.zip",
+                file_name="KDPEasy_Word_Search_Book_PNG.zip",
                 mime="application/zip",
             )
 
