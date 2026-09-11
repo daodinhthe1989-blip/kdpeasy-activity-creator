@@ -103,15 +103,22 @@ COVER_THEME_HINTS = {
 }
 
 
-def build_cover_prompt(book_title, theme_choice):
-    subject = COVER_THEME_HINTS.get(theme_choice, "a fun, colorful children's activity book theme")
-    title_text = book_title.strip() if book_title.strip() else "ACTIVITY BOOK"
+def build_cover_prompt(book_title, theme_choice, page_w, page_h):
+    subject = COVER_THEME_HINTS.get(theme_choice, "a fun, colorful puzzle-book theme")
+    title_text = book_title.strip() if book_title.strip() else "WORD SEARCH"
+    orientation = "portrait" if page_h >= page_w else "landscape"
+    trim_w = f"{page_w:g}"
+    trim_h = f"{page_h:g}"
     return (
-        f'Create a vibrant, full-color book cover illustration for a children\'s activity book titled "{title_text}". '
-        f"Scene: {subject}. Bright, cheerful, high-contrast colors, playful cartoon illustration style, "
+        f"Create a vibrant, full-color book cover illustration for a kids' WORD SEARCH puzzle book. "
+        f"Make it immediately obvious this is a word search / puzzle book - for example, weave a few "
+        f"large playful scattered letters or a faint word-search letter-grid pattern into the background "
+        f"or border of the scene, without covering the main illustration. "
+        f'Scene: {subject}. Bright, cheerful, high-contrast colors, playful cartoon illustration style, '
         f"friendly and inviting for kids and parents browsing an online bookstore. "
-        f"Leave open, uncluttered space in the upper third of the image so a title can be added afterward. "
-        f"Portrait composition, no text or letters in the image itself, no watermarks."
+        f'Include the title "{title_text}" in bold, playful, easy-to-read lettering, designed as part of '
+        f"the cover artwork (not added afterward). "
+        f"{orientation.capitalize()} book cover, proportioned for a {trim_w} x {trim_h} inch page. No watermarks."
     )
 
 
@@ -340,18 +347,12 @@ def build_activity_pdf(page_w, page_h, theme,
     if include_cover:
         pdf.add_page()
         if cover_photo is not None:
+            # No title band drawn on top — the AI-generated cover image (via the
+            # prompt above) already has the title designed into the artwork itself.
             pil_img, draw_w, draw_h = prepare_photo(cover_photo, page_w, page_h, photo_fill)
             offset_x = (page_w - draw_w) / 2
             offset_y = (page_h - draw_h) / 2
             pdf.image(pil_img, x=offset_x, y=offset_y, w=draw_w, h=draw_h)
-            if cover_title:
-                band_h = 1.1 if page_h >= 8 else 0.85
-                pdf.set_fill_color(*primary)
-                pdf.rect(0, page_h - band_h, page_w, band_h, "F")
-                pdf.set_text_color(255, 255, 255)
-                pdf.set_font("Helvetica", "B", 26 if page_w < 7 else 30)
-                pdf.set_xy(0.3, page_h - band_h + (band_h - 0.5) / 2)
-                pdf.multi_cell(page_w - 0.6, 0.5, cover_title, align="C")
         elif cover_title:
             pdf.set_fill_color(*primary)
             pdf.rect(0, 0, page_w, page_h, "F")
@@ -419,7 +420,7 @@ if check_password():
         cover_title = st.text_input("Cover page title", value="ACTIVITY BOOK")
 
         with st.expander("Need cover art? Generate a free AI image prompt"):
-            cover_prompt = build_cover_prompt(cover_title, theme_choice)
+            cover_prompt = build_cover_prompt(cover_title, theme_choice, page_w, page_h)
             st.caption(
                 "Copy this prompt into ChatGPT (or another AI image tool), ask it to generate the image, "
                 "then download that image and upload it below as your cover photo."
