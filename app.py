@@ -34,6 +34,60 @@ PAGE_SIZES = {
 # block once printed in B&W, which is how nearly every word search book ships).
 THEME = {"primary": (0, 0, 0), "text": (17, 17, 17)}
 
+# Preset word banks so customers can pick a topic instead of typing every word themselves.
+WORD_THEMES = {
+    "Farm Animals": [
+        "COW", "PIG", "HORSE", "SHEEP", "GOAT", "CHICKEN", "DUCK", "TURKEY",
+        "ROOSTER", "DONKEY", "RABBIT", "GOOSE", "LAMB", "PONY", "BULL", "HEN",
+        "BARN", "TRACTOR", "FIELD", "HAYSTACK", "FARMER", "STABLE", "PASTURE", "SADDLE",
+    ],
+    "Ocean & Sea Life": [
+        "SHARK", "WHALE", "DOLPHIN", "OCTOPUS", "STARFISH", "JELLYFISH", "CRAB",
+        "LOBSTER", "SEAHORSE", "TURTLE", "CORAL", "SEAWEED", "CLAM", "OYSTER",
+        "STINGRAY", "EEL", "PENGUIN", "SEAL", "WALRUS", "ANCHOR", "WAVE", "TIDE", "REEF", "PEARL",
+    ],
+    "Dinosaurs": [
+        "TREX", "RAPTOR", "TRICERATOPS", "STEGOSAURUS", "PTERODACTYL", "BRONTOSAURUS",
+        "FOSSIL", "VOLCANO", "JUNGLE", "EXTINCT", "SKELETON", "CLAW", "SCALES", "EGG",
+        "NEST", "PREHISTORIC", "SWAMP", "HERBIVORE", "CARNIVORE", "ANCIENT", "ROAR", "TAIL", "SPIKE", "HORN",
+    ],
+    "Space & Astronauts": [
+        "ROCKET", "PLANET", "ASTRONAUT", "GALAXY", "COMET", "METEOR", "SATELLITE",
+        "ORBIT", "MOON", "STAR", "MARS", "JUPITER", "SATURN", "NEBULA", "TELESCOPE",
+        "SPACESHIP", "ALIEN", "CRATER", "GRAVITY", "COSMOS", "UNIVERSE", "SHUTTLE", "LAUNCH", "SUNLIGHT",
+    ],
+    "Jungle & Safari": [
+        "LION", "TIGER", "ELEPHANT", "GIRAFFE", "ZEBRA", "MONKEY", "GORILLA",
+        "LEOPARD", "CHEETAH", "HIPPO", "RHINO", "CROCODILE", "PARROT", "SNAKE",
+        "JUNGLE", "VINE", "WATERFALL", "SAFARI", "HYENA", "ANTELOPE", "TOUCAN", "JAGUAR", "PANTHER", "BAMBOO",
+    ],
+    "Sports": [
+        "SOCCER", "BASKETBALL", "BASEBALL", "TENNIS", "HOCKEY", "GOLF", "SWIMMING",
+        "RUNNING", "CYCLING", "BOXING", "WRESTLING", "VOLLEYBALL", "FOOTBALL",
+        "CRICKET", "RUGBY", "SKATING", "SURFING", "SKIING", "MARATHON", "REFEREE", "TROPHY", "STADIUM", "COACH", "ATHLETE",
+    ],
+    "Food & Cooking": [
+        "PIZZA", "BURGER", "PASTA", "SALAD", "SANDWICH", "PANCAKE", "COOKIE",
+        "CHOCOLATE", "CUPCAKE", "BREAD", "CHEESE", "SOUP", "NOODLES", "TACO",
+        "SUSHI", "WAFFLE", "DONUT", "MUFFIN", "YOGURT", "HONEY", "BUTTER", "RECIPE", "KITCHEN", "OVEN",
+    ],
+    "Holidays & Christmas": [
+        "SANTA", "REINDEER", "SNOWMAN", "ORNAMENT", "STOCKING", "CANDLE", "WREATH",
+        "MISTLETOE", "SLEIGH", "CHIMNEY", "GARLAND", "TINSEL", "CAROL", "GINGERBREAD",
+        "ELF", "PRESENT", "HOLLY", "WINTER", "SNOWFLAKE", "FIREPLACE", "JINGLE", "NUTCRACKER", "ICICLE", "MITTEN",
+    ],
+    "Weather & Seasons": [
+        "SUNSHINE", "RAINBOW", "THUNDER", "LIGHTNING", "CLOUD", "BREEZE", "STORM",
+        "SNOW", "FROST", "HUMID", "DROUGHT", "TORNADO", "HURRICANE", "FORECAST",
+        "AUTUMN", "SPRING", "SUMMER", "WINTER", "BLIZZARD", "DRIZZLE", "FOG", "HAIL", "MIST", "TEMPERATURE",
+    ],
+    "School Days": [
+        "PENCIL", "NOTEBOOK", "TEACHER", "CLASSROOM", "HOMEWORK", "BACKPACK",
+        "LIBRARY", "LOCKER", "RECESS", "PLAYGROUND", "PRINCIPAL", "SCISSORS",
+        "CRAYON", "MARKER", "RULER", "ALPHABET", "SCIENCE", "HISTORY", "READING", "LUNCHBOX", "SCHOOLBUS", "CHALKBOARD", "ASSIGNMENT", "STUDENT",
+    ],
+}
+
 CUSTOM_CSS = """
 <style>
 :root {
@@ -323,8 +377,13 @@ if check_password():
     show_answers = st.checkbox("Include an answer key section at the end", value=True)
 
     st.markdown("### Word Search settings")
-    ws_word_bank = st.text_area("Word bank (one word per line, or comma-separated)", height=100,
-                                 placeholder="LION\nTIGER\nELEPHANT\nGIRAFFE\nZEBRA")
+    theme_choice = st.selectbox("Word theme", ["Custom (type your own)"] + list(WORD_THEMES.keys()))
+    default_words = "\n".join(WORD_THEMES[theme_choice]) if theme_choice in WORD_THEMES else ""
+    ws_word_bank = st.text_area(
+        "Word bank (auto-filled from the theme above — feel free to add, remove, or edit)",
+        value=default_words, height=100, key=f"wordbank_{theme_choice}",
+        placeholder="LION\nTIGER\nELEPHANT\nGIRAFFE\nZEBRA",
+    )
     wc1, wc2, wc3 = st.columns(3)
     with wc1:
         ws_num_puzzles = st.number_input("Number of puzzles", min_value=1, max_value=20, value=3)
