@@ -226,12 +226,6 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
     pdf.add_page()
     content_w = page_w - 2 * MARGIN
 
-    # Decorative outer frame around the whole page (matches the reference layout)
-    border_margin = 0.25
-    pdf.set_draw_color(*text_color)
-    pdf.set_line_width(0.02)
-    pdf.rect(border_margin, border_margin, page_w - 2 * border_margin, page_h - 2 * border_margin, "D")
-
     # Plain centered title, no colored band (matches the reference layout)
     pdf.set_text_color(*text_color)
     pdf.set_font("Helvetica", "B", 22 if page_w >= 7 else 18)
@@ -265,6 +259,14 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
     max_h_for_grid = (page_h - MARGIN) - grid_top - GAP * 2 - wordlist_h
     cell = min(content_w / grid_size, max(0.1, max_h_for_grid) / grid_size)
     grid_x0 = MARGIN + (content_w - grid_size * cell) / 2
+
+    # Border frame hugging just the letter grid — not the title or word list
+    # below it (matches the reference layout).
+    border_pad = 0.08
+    pdf.set_draw_color(*text_color)
+    pdf.set_line_width(0.02)
+    pdf.rect(grid_x0 - border_pad, grid_top - border_pad,
+              grid_size * cell + 2 * border_pad, grid_size * cell + 2 * border_pad, "D")
 
     if show_solution:
         highlight = tint_toward_white(primary, 0.6)
