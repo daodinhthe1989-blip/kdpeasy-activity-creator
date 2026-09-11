@@ -88,6 +88,33 @@ WORD_THEMES = {
     ],
 }
 
+# Short visual-scene hints used to build a cover-art AI image prompt per theme.
+COVER_THEME_HINTS = {
+    "Farm Animals": "a cheerful farmyard scene with a cow, pig, chickens, and a red barn under a sunny blue sky",
+    "Ocean & Sea Life": "a colorful underwater scene with a dolphin, tropical fish, and a coral reef",
+    "Dinosaurs": "friendly cartoon dinosaurs in a lush prehistoric jungle landscape",
+    "Space & Astronauts": "a fun outer-space scene with planets, stars, and a cartoon astronaut floating by a rocket",
+    "Jungle & Safari": "a lively jungle safari scene with a lion, an elephant, and tropical plants",
+    "Sports": "kids happily playing soccer, basketball, and swimming in a colorful park",
+    "Food & Cooking": "a colorful spread of fun foods like pizza, cupcakes, and fruit",
+    "Holidays & Christmas": "a festive Christmas scene with Santa, a decorated tree, and falling snow",
+    "Weather & Seasons": "a whimsical scene showing sunshine, rain, snow, and a rainbow together",
+    "School Days": "a fun classroom scene with books, pencils, a backpack, and a school bus",
+}
+
+
+def build_cover_prompt(book_title, theme_choice):
+    subject = COVER_THEME_HINTS.get(theme_choice, "a fun, colorful children's activity book theme")
+    title_text = book_title.strip() if book_title.strip() else "ACTIVITY BOOK"
+    return (
+        f'Create a vibrant, full-color book cover illustration for a children\'s activity book titled "{title_text}". '
+        f"Scene: {subject}. Bright, cheerful, high-contrast colors, playful cartoon illustration style, "
+        f"friendly and inviting for kids and parents browsing an online bookstore. "
+        f"Leave open, uncluttered space in the upper third of the image so a title can be added afterward. "
+        f"Portrait composition, no text or letters in the image itself, no watermarks."
+    )
+
+
 CUSTOM_CSS = """
 <style>
 :root {
@@ -344,12 +371,20 @@ def build_activity_pdf(page_w, page_h, theme,
 
     if show_answers and ws_puzzles:
         pdf.add_page()
-        pdf.set_fill_color(*primary)
-        pdf.rect(0, 0, page_w, page_h, "F")
-        pdf.set_text_color(255, 255, 255)
+        # Plain white page with a bordered banner instead of a full black fill —
+        # a solid black page is heavy on toner and prone to streaking/uneven
+        # coverage on print-on-demand presses, and breaks the all-white look
+        # of the rest of the book for no real benefit.
+        box_w, box_h = min(4.0, page_w - 1.0), 1.0
+        box_x = (page_w - box_w) / 2
+        box_y = (page_h - box_h) / 2
+        pdf.set_draw_color(*primary)
+        pdf.set_line_width(0.03)
+        pdf.rect(box_x, box_y, box_w, box_h, "D")
+        pdf.set_text_color(*primary)
         pdf.set_font("Helvetica", "B", 28 if page_w < 7 else 34)
-        pdf.set_xy(0.3, page_h / 2 - 0.3)
-        pdf.cell(page_w - 0.6, 0.6, "ANSWER KEY", align="C")
+        pdf.set_xy(box_x, box_y + box_h / 2 - 0.3)
+        pdf.cell(box_w, 0.6, "ANSWER KEY", align="C")
 
         for i, (grid, used_words, placements) in enumerate(ws_puzzles):
             draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + 1} - ANSWER", grid, used_words, True, placements)
@@ -374,12 +409,23 @@ if check_password():
     if orientation == "Landscape":
         page_w, page_h = page_h, page_w
 
+    theme_choice = st.selectbox("Word theme", ["Custom (type your own)"] + list(WORD_THEMES.keys()))
+
     include_cover = st.checkbox("Include a cover page", value=True)
     cover_title = ""
     cover_photo = None
     photo_fill = False
     if include_cover:
         cover_title = st.text_input("Cover page title", value="ACTIVITY BOOK")
+
+        with st.expander("Need cover art? Generate a free AI image prompt"):
+            cover_prompt = build_cover_prompt(cover_title, theme_choice)
+            st.caption(
+                "Copy this prompt into ChatGPT (or another AI image tool), ask it to generate the image, "
+                "then download that image and upload it below as your cover photo."
+            )
+            st.code(cover_prompt, language=None)
+
         cover_photo = st.file_uploader("Cover photo (optional, fills the whole cover page)", type=["png", "jpg", "jpeg"], key="cover_photo")
         if cover_photo is not None:
             fit_choice = st.radio(
@@ -395,7 +441,7 @@ if check_password():
     show_answers = st.checkbox("Include an answer key section at the end", value=True)
 
     st.markdown("### Word Search settings")
-    theme_choice = st.selectbox("Word theme", ["Custom (type your own)"] + list(WORD_THEMES.keys()))
+    st.caption(f"Using word theme: **{theme_choice}** (change it above, near Page size)")
     default_words = "\n".join(WORD_THEMES[theme_choice]) if theme_choice in WORD_THEMES else ""
     ws_word_bank = st.text_area(
         "Word bank (auto-filled from the theme above — feel free to add, remove, or edit)",
