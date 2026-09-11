@@ -354,12 +354,19 @@ def build_activity_pdf(page_w, page_h, theme,
             offset_y = (page_h - draw_h) / 2
             pdf.image(pil_img, x=offset_x, y=offset_y, w=draw_w, h=draw_h)
         elif cover_title:
-            pdf.set_fill_color(*primary)
-            pdf.rect(0, 0, page_w, page_h, "F")
-            pdf.set_text_color(255, 255, 255)
-            pdf.set_font("Helvetica", "B", 28 if page_w < 7 else 34)
-            pdf.set_xy(0.3, page_h / 2 - 0.5)
-            pdf.multi_cell(page_w - 0.6, 0.55, cover_title, align="C")
+            # Plain white background, black text — same reasoning as the
+            # ANSWER KEY page: a full black fill is heavy on toner and prone
+            # to streaking on print-on-demand presses.
+            box_w, box_h = min(5.0, page_w - 1.0), 1.4
+            box_x = (page_w - box_w) / 2
+            box_y = (page_h - box_h) / 2
+            pdf.set_draw_color(*primary)
+            pdf.set_line_width(0.03)
+            pdf.rect(box_x, box_y, box_w, box_h, "D")
+            pdf.set_text_color(*primary)
+            pdf.set_font("Helvetica", "B", 24 if page_w < 7 else 28)
+            pdf.set_xy(box_x + 0.2, box_y + 0.2)
+            pdf.multi_cell(box_w - 0.4, 0.5, cover_title, align="C")
 
     bank = [w.strip() for w in ws_word_bank.replace(",", "\n").splitlines() if w.strip()]
     ws_puzzles = []
