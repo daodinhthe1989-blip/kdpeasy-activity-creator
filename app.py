@@ -32,7 +32,7 @@ PAGE_SIZES = {
 # Fixed high-contrast look, optimized for black & white KDP interior printing
 # (color themes were removed — a colored title band just turns into a gray
 # block once printed in B&W, which is how nearly every word search book ships).
-THEME = {"primary": (0, 0, 0), "text": (17, 17, 17)}
+THEME = {"primary": (0, 0, 0), "text": (0, 0, 0)}
 
 # Preset word banks so customers can pick a topic instead of typing every word themselves.
 WORD_THEMES = {
@@ -226,22 +226,52 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
     pdf.add_page()
     content_w = page_w - 2 * MARGIN
 
+    # Decorative outer frame around the whole page (matches the reference layout)
+    border_margin = 0.25
+    pdf.set_draw_color(*text_color)
+    pdf.set_line_width(0.02)
+    pdf.rect(border_margin, border_margin, page_w - 2 * border_margin, page_h - 2 * border_margin, "D")
+
     # Plain centered title, no colored band (matches the reference layout)
     pdf.set_text_color(*text_color)
     pdf.set_font("Helvetica", "B", 22 if page_w >= 7 else 18)
     pdf.set_xy(MARGIN, MARGIN)
     pdf.cell(content_w, TITLE_H, title, align="C")
 
+    # Work out the word-bank column layout FIRST (it doesn't depend on the
+    # grid's cell size) so its height can be reserved before sizing the grid.
+    pdf.set_font("Helvetica", "B", 14)
+    words_sorted = sorted(word_list)
+    n = len(words_sorted)
+    row_h = 0.32
+    col_gap = 0.3
+    pad = 0.3
+    max_word_w = max((pdf.get_string_width(w) for w in words_sorted), default=0)
+    min_col_w = max_word_w + pad
+    num_cols_wanted = max(2, min(4, -(-n // 5)))
+    max_cols_fit = max(1, int((content_w + col_gap) // (min_col_w + col_gap)))
+    num_cols = max(1, min(num_cols_wanted, max_cols_fit))
+    num_rows = -(-n // num_cols) if num_cols else 0
+    col_w = min((content_w - (num_cols - 1) * col_gap) / num_cols, min_col_w)
+    total_w = col_w * num_cols + (num_cols - 1) * col_gap
+    start_x = MARGIN + (content_w - total_w) / 2
+    wordlist_h = num_rows * row_h
+
+    # Grid cell size: fit both the page width AND the remaining page height
+    # (title + grid + word list must all fit above the bottom margin — on a
+    # square/short trim size, width alone is not the limiting dimension).
     grid_size = len(grid)
-    cell = content_w / grid_size
     grid_top = MARGIN + TITLE_H + GAP
+    max_h_for_grid = (page_h - MARGIN) - grid_top - GAP * 2 - wordlist_h
+    cell = min(content_w / grid_size, max(0.1, max_h_for_grid) / grid_size)
+    grid_x0 = MARGIN + (content_w - grid_size * cell) / 2
 
     if show_solution:
         highlight = tint_toward_white(primary, 0.6)
         pdf.set_fill_color(*highlight)
         for cells in placements.values():
             for (r, c) in cells:
-                x = MARGIN + c * cell
+                x = grid_x0 + c * cell
                 y = grid_top + r * cell
                 pdf.rect(x, y, cell, cell, "F")
 
@@ -251,32 +281,18 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
     pdf.set_text_color(*text_color)
     for r in range(grid_size):
         for c in range(grid_size):
-            x = MARGIN + c * cell
+            x = grid_x0 + c * cell
             y = grid_top + r * cell
             pdf.set_xy(x, y + cell * 0.2)
             pdf.cell(cell, cell * 0.6, grid[r][c], align="C")
 
     # Word bank: alphabetical, filled column-by-column (top-to-bottom, then next column)
     list_top = grid_top + grid_size * cell + GAP * 2
-    words_sorted = sorted(word_list)
-    n = len(words_sorted)
-    num_cols = max(2, min(4, -(-n // 5)))
-    num_rows = -(-n // num_cols)
-    row_h = 0.26
-
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("Helvetica", "B", 14)
     pdf.set_text_color(*text_color)
-    # Size columns to the longest word instead of stretching across the full
-    # page width, then center the block — keeps short word lists tight
-    # instead of spreading them out with a big gap in the middle.
-    max_word_w = max((pdf.get_string_width(w) for w in words_sorted), default=0)
-    col_w = min(content_w / num_cols, max_word_w + 0.35)
-    total_w = col_w * num_cols
-    start_x = MARGIN + (content_w - total_w) / 2
-
     for i, word in enumerate(words_sorted):
         col, row = divmod(i, num_rows)
-        x = start_x + col * col_w
+        x = start_x + col * (col_w + col_gap)
         y = list_top + row * row_h
         pdf.set_xy(x, y)
         pdf.cell(col_w, row_h, word, align="C")
