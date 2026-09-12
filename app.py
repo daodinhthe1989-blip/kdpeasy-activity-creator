@@ -339,7 +339,7 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
 def build_activity_pdf(page_w, page_h, theme,
                         include_cover, cover_title, cover_photo, photo_fill,
                         ws_word_bank, ws_num_puzzles, ws_words_per_puzzle, ws_grid_size, ws_hard_mode,
-                        show_answers):
+                        show_answers, ws_start_number=1):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
     primary = theme["primary"]
@@ -375,7 +375,7 @@ def build_activity_pdf(page_w, page_h, theme,
         grid, placements, skipped = generate_word_search(pool, ws_grid_size, ws_hard_mode)
         used_words = sorted({w.strip().upper().replace(" ", "") for w in pool} & set(placements.keys()))
         ws_puzzles.append((grid, used_words, placements))
-        draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + 1}", grid, used_words, False, {})
+        draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + ws_start_number}", grid, used_words, False, {})
 
     if show_answers and ws_puzzles:
         pdf.add_page()
@@ -395,7 +395,7 @@ def build_activity_pdf(page_w, page_h, theme,
         pdf.cell(box_w, 0.6, "ANSWER KEY", align="C")
 
         for i, (grid, used_words, placements) in enumerate(ws_puzzles):
-            draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + 1} - ANSWER", grid, used_words, True, placements)
+            draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + ws_start_number} - ANSWER", grid, used_words, True, placements)
 
     pdf_bytes = pdf.output()
     return BytesIO(bytes(pdf_bytes))
@@ -458,13 +458,19 @@ if check_password():
         value=default_words, height=100, key=f"wordbank_{theme_choice}",
         placeholder="LION\nTIGER\nELEPHANT\nGIRAFFE\nZEBRA",
     )
-    wc1, wc2, wc3 = st.columns(3)
+    wc1, wc2, wc3, wc4 = st.columns(4)
     with wc1:
         ws_num_puzzles = st.number_input("Number of puzzles", min_value=1, max_value=20, value=3)
     with wc2:
         ws_words_per_puzzle = st.number_input("Words per puzzle", min_value=5, max_value=20, value=10)
     with wc3:
         ws_grid_size = st.selectbox("Grid size", [12, 15, 18], index=1)
+    with wc4:
+        ws_start_number = st.number_input(
+            "Start numbering at",
+            min_value=1, max_value=999, value=1,
+            help="Use this to combine puzzles from different batches into one book without renumbering by hand.",
+        )
     ws_hard_mode = st.checkbox("Harder mode (backwards + diagonal words)", value=False)
 
     bank_preview = [w.strip() for w in ws_word_bank.replace(",", "\n").splitlines() if w.strip()]
@@ -481,7 +487,7 @@ if check_password():
                 page_w, page_h, theme,
                 include_cover, cover_title, cover_photo, photo_fill,
                 ws_word_bank, int(ws_num_puzzles), int(ws_words_per_puzzle), int(ws_grid_size), ws_hard_mode,
-                show_answers,
+                show_answers, int(ws_start_number),
             )
             pdf_bytes = pdf_buf.getvalue()
             st.success("Your activity book is ready! Here's a preview before you download:")
