@@ -491,6 +491,11 @@ if check_password():
             "(replacing or adding to the preset words)."
         )
         st.code(word_prompt, language=None)
+        st.caption(
+            "Need more words, or making multiple books on the same theme? Ask ChatGPT again "
+            "in the same chat: \"give me 20 more, different from these\" — it'll avoid repeating "
+            "itself since it remembers what it already gave you."
+        )
 
     ws_word_bank = st.text_area(
         "Word bank (auto-filled from the theme above — feel free to add, remove, or edit)",
