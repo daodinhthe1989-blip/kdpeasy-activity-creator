@@ -508,7 +508,10 @@ if check_password():
     with wc2:
         ws_words_per_puzzle = st.number_input("Words per puzzle", min_value=5, max_value=20, value=10)
     with wc3:
-        ws_grid_size = st.selectbox("Grid size", [12, 15, 18], index=1)
+        ws_grid_size = st.selectbox(
+            "Grid size", [6, 8, 10, 12, 15, 18], index=4,
+            help="Smaller grids (6-10) work well for very young kids — fewer, shorter words per puzzle.",
+        )
     with wc4:
         ws_start_number = st.number_input(
             "Start numbering at",
