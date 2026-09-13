@@ -122,6 +122,29 @@ def build_cover_prompt(book_title, theme_choice, page_w, page_h):
     )
 
 
+# Customers keep asking for age-appropriate word lists (e.g. simpler words for
+# ages 5-7 vs. longer ones for teens). Rather than hand-curate a word list per
+# theme per age band, we generate a ChatGPT prompt — same pattern as the cover
+# art prompt above — so the customer gets age-matched words with one paste.
+AGE_GROUPS = [
+    "Any age",
+    "Early readers (ages 5-7)",
+    "Kids (ages 8-10)",
+    "Tweens (ages 10-12)",
+    "Teens (ages 13+)",
+]
+
+
+def build_word_prompt(theme_choice, age_group):
+    subject = theme_choice if theme_choice != "Custom (type your own)" else "a topic of your choice"
+    age_hint = "" if age_group == "Any age" else f" appropriate for {age_group}"
+    return (
+        f"Give me 20 word-search words about {subject}{age_hint}. "
+        f"Use simple, common, single words only (no phrases), all uppercase, one word per line, "
+        f"no duplicates, and no word longer than 12 letters."
+    )
+
+
 CUSTOM_CSS = """
 <style>
 :root {
@@ -459,6 +482,16 @@ if check_password():
     st.markdown("### Word Search settings")
     st.caption(f"Using word theme: **{theme_choice}** (change it above, near Page size)")
     default_words = "\n".join(WORD_THEMES[theme_choice]) if theme_choice in WORD_THEMES else ""
+
+    age_group = st.selectbox("Age group (for the AI word prompt below)", AGE_GROUPS, index=0)
+    with st.expander("Need age-appropriate words? Generate a free AI prompt"):
+        word_prompt = build_word_prompt(theme_choice, age_group)
+        st.caption(
+            "Copy this prompt into ChatGPT, then copy its word list into the word bank below "
+            "(replacing or adding to the preset words)."
+        )
+        st.code(word_prompt, language=None)
+
     ws_word_bank = st.text_area(
         "Word bank (auto-filled from the theme above — feel free to add, remove, or edit)",
         value=default_words, height=100, key=f"wordbank_{theme_choice}",
