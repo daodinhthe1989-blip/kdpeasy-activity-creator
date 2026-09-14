@@ -361,24 +361,25 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
               grid_size * cell + 2 * border_pad, grid_size * cell + 2 * border_pad, "D")
 
     if show_solution:
-        # An oval loop around each found word — the standard look for word
-        # search answer keys, and much lighter on toner than shaded boxes
-        # (which also made it hard to tell exactly which cells were the word
-        # vs. just adjacent, especially for diagonal words).
+        # A pill-shaped (stadium) loop around each found word — the standard
+        # look for word search answer keys, and much lighter on toner than
+        # shaded boxes (which also made it hard to tell exactly which cells
+        # were the word vs. just adjacent, especially for diagonal words).
         pdf.set_draw_color(*text_color)
-        pdf.set_line_width(cell * 0.06)
+        pdf.set_line_width(cell * 0.05)
         for cells in placements.values():
             (r0, c0), (r1, c1) = cells[0], cells[-1]
             x0 = grid_x0 + (c0 + 0.5) * cell
             y0 = grid_top + (r0 + 0.5) * cell
             x1 = grid_x0 + (c1 + 0.5) * cell
             y1 = grid_top + (r1 + 0.5) * cell
-            oval_cx, oval_cy = (x0 + x1) / 2, (y0 + y1) / 2
-            length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 + cell
-            thickness = cell * 0.85
+            pill_cx, pill_cy = (x0 + x1) / 2, (y0 + y1) / 2
+            length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 + cell * 0.7
+            thickness = cell * 0.5
             angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
-            with pdf.rotation(angle, x=oval_cx, y=oval_cy):
-                pdf.ellipse(oval_cx - length / 2, oval_cy - thickness / 2, length, thickness, style="D")
+            with pdf.rotation(angle, x=pill_cx, y=pill_cy):
+                pdf.rect(pill_cx - length / 2, pill_cy - thickness / 2, length, thickness,
+                          style="D", round_corners=True, corner_radius=thickness * 0.49)
 
     # Plain letters, no per-cell grid lines (matches the reference layout)
     font_size = max(8, min(20, cell * 45))
