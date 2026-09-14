@@ -3,6 +3,7 @@ import fitz
 import zipfile
 import random
 import string
+import math
 from datetime import date
 from fpdf import FPDF
 from io import BytesIO
@@ -134,6 +135,23 @@ AGE_GROUPS = [
     "Teens (ages 13+)",
 ]
 
+# Debbie's suggestion: age should also scale puzzle DIFFICULTY (grid size +
+# word-placement directions), not just the word list. "Any age" leaves
+# whatever grid/difficulty the customer already has alone.
+AGE_PRESETS = {
+    "Early readers (ages 5-7)": {"grid": 8, "difficulty": "Easy — across & down only"},
+    "Kids (ages 8-10)": {"grid": 10, "difficulty": "Medium — + backwards"},
+    "Tweens (ages 10-12)": {"grid": 15, "difficulty": "Hard — + diagonals"},
+    "Teens (ages 13+)": {"grid": 18, "difficulty": "Expert — all directions"},
+}
+
+
+def _apply_age_preset():
+    preset = AGE_PRESETS.get(st.session_state.get("age_group"))
+    if preset:
+        st.session_state["ws_grid_size"] = preset["grid"]
+        st.session_state["ws_difficulty"] = preset["difficulty"]
+
 
 def build_word_prompt(theme_choice, age_group):
     subject = theme_choice if theme_choice != "Custom (type your own)" else "a topic of your choice"
@@ -198,15 +216,6 @@ def check_password() -> bool:
     return False
 
 
-def tint_toward_white(color, amount=0.85):
-    r, g, b = color
-    return (
-        int(r + (255 - r) * amount),
-        int(g + (255 - g) * amount),
-        int(b + (255 - b) * amount),
-    )
-
-
 def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
     uploaded_file.seek(0)
     img = Image.open(uploaded_file).convert("RGB")
@@ -235,18 +244,44 @@ def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
 
 # ---------- Word Search ----------
 
-WS_DIRECTIONS_EASY = [(0, 1), (1, 0)]
-WS_DIRECTIONS_HARD = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+# 4 difficulty tiers instead of one "harder mode" on/off switch — lets the age
+# group presets above scale placement complexity smoothly with the reader.
+WS_DIFFICULTIES = {
+    "Easy — across & down only": [(0, 1), (1, 0)],
+    "Medium — + backwards": [(0, 1), (0, -1), (1, 0), (-1, 0)],
+    "Hard — + diagonals": [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1)],
+    "Expert — all directions": [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)],
+}
 
 
-def generate_word_search(words, grid_size, hard_mode=False, max_attempts=300):
+def build_word_pools(bank, num_puzzles, words_per_puzzle):
+    """Split the word bank across puzzles so the same word doesn't show up
+    in two different puzzles in the same book. Falls back to independent
+    sampling (which can repeat) only when the bank isn't long enough to
+    avoid it — the caller should warn the customer in that case."""
+    unique_words = list(dict.fromkeys(w.strip().upper().replace(" ", "") for w in bank if w.strip()))
+    total_needed = num_puzzles * words_per_puzzle
+    insufficient = len(unique_words) < total_needed
+
+    if insufficient:
+        pools = [
+            unique_words if len(unique_words) <= words_per_puzzle else random.sample(unique_words, words_per_puzzle)
+            for _ in range(num_puzzles)
+        ]
+    else:
+        shuffled = unique_words[:]
+        random.shuffle(shuffled)
+        pools = [shuffled[i * words_per_puzzle:(i + 1) * words_per_puzzle] for i in range(num_puzzles)]
+    return pools, insufficient
+
+
+def generate_word_search(words, grid_size, directions, max_attempts=300):
     words = [w.strip().upper().replace(" ", "") for w in words if w.strip()]
     words = [w for w in words if w.isalpha() and len(w) <= grid_size]
     words = sorted(set(words), key=len, reverse=True)
     grid = [[None] * grid_size for _ in range(grid_size)]
     placements = {}
     skipped = []
-    directions = WS_DIRECTIONS_HARD if hard_mode else WS_DIRECTIONS_EASY
 
     for word in words:
         placed = False
@@ -326,13 +361,24 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
               grid_size * cell + 2 * border_pad, grid_size * cell + 2 * border_pad, "D")
 
     if show_solution:
-        highlight = tint_toward_white(primary, 0.6)
-        pdf.set_fill_color(*highlight)
+        # An oval loop around each found word — the standard look for word
+        # search answer keys, and much lighter on toner than shaded boxes
+        # (which also made it hard to tell exactly which cells were the word
+        # vs. just adjacent, especially for diagonal words).
+        pdf.set_draw_color(*text_color)
+        pdf.set_line_width(cell * 0.06)
         for cells in placements.values():
-            for (r, c) in cells:
-                x = grid_x0 + c * cell
-                y = grid_top + r * cell
-                pdf.rect(x, y, cell, cell, "F")
+            (r0, c0), (r1, c1) = cells[0], cells[-1]
+            x0 = grid_x0 + (c0 + 0.5) * cell
+            y0 = grid_top + (r0 + 0.5) * cell
+            x1 = grid_x0 + (c1 + 0.5) * cell
+            y1 = grid_top + (r1 + 0.5) * cell
+            oval_cx, oval_cy = (x0 + x1) / 2, (y0 + y1) / 2
+            length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 + cell
+            thickness = cell * 0.85
+            angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
+            with pdf.rotation(angle, x=oval_cx, y=oval_cy):
+                pdf.ellipse(oval_cx - length / 2, oval_cy - thickness / 2, length, thickness, style="D")
 
     # Plain letters, no per-cell grid lines (matches the reference layout)
     font_size = max(8, min(20, cell * 45))
@@ -361,7 +407,7 @@ def draw_word_search_page(pdf, page_w, page_h, theme, title, grid, word_list, sh
 
 def build_activity_pdf(page_w, page_h, theme,
                         include_cover, cover_title, cover_photo, photo_fill,
-                        ws_word_bank, ws_num_puzzles, ws_words_per_puzzle, ws_grid_size, ws_hard_mode,
+                        ws_word_pools, ws_grid_size, ws_directions,
                         show_answers, ws_start_number=1):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
@@ -397,12 +443,10 @@ def build_activity_pdf(page_w, page_h, theme,
             pdf.set_xy(box_x + 0.2, box_y + (box_h - len(wrapped) * line_h) / 2)
             pdf.multi_cell(box_w - 0.4, line_h, cover_title, align="C")
 
-    bank = [w.strip() for w in ws_word_bank.replace(",", "\n").splitlines() if w.strip()]
     ws_puzzles = []
-    for i in range(ws_num_puzzles):
-        pool = bank if len(bank) <= ws_words_per_puzzle else random.sample(bank, ws_words_per_puzzle)
-        grid, placements, skipped = generate_word_search(pool, ws_grid_size, ws_hard_mode)
-        used_words = sorted({w.strip().upper().replace(" ", "") for w in pool} & set(placements.keys()))
+    for i, pool in enumerate(ws_word_pools):
+        grid, placements, skipped = generate_word_search(pool, ws_grid_size, ws_directions)
+        used_words = sorted(set(pool) & set(placements.keys()))
         ws_puzzles.append((grid, used_words, placements))
         draw_word_search_page(pdf, page_w, page_h, theme, f"PUZZLE {i + ws_start_number}", grid, used_words, False, {})
 
@@ -483,7 +527,10 @@ if check_password():
     st.caption(f"Using word theme: **{theme_choice}** (change it above, near Page size)")
     default_words = "\n".join(WORD_THEMES[theme_choice]) if theme_choice in WORD_THEMES else ""
 
-    age_group = st.selectbox("Age group (for the AI word prompt below)", AGE_GROUPS, index=0)
+    age_group = st.selectbox(
+        "Age group (also sets grid size + difficulty below)", AGE_GROUPS, index=0,
+        key="age_group", on_change=_apply_age_preset,
+    )
     with st.expander("Need age-appropriate words? Generate a free AI prompt"):
         word_prompt = build_word_prompt(theme_choice, age_group)
         st.caption(
@@ -509,8 +556,9 @@ if check_password():
         ws_words_per_puzzle = st.number_input("Words per puzzle", min_value=5, max_value=20, value=10)
     with wc3:
         ws_grid_size = st.selectbox(
-            "Grid size", [6, 8, 10, 12, 15, 18], index=4,
-            help="Smaller grids (6-10) work well for very young kids — fewer, shorter words per puzzle.",
+            "Grid size", [6, 8, 10, 12, 15, 18], index=4, key="ws_grid_size",
+            help="Smaller grids (6-10) work well for very young kids — fewer, shorter words per puzzle. "
+                 "Also auto-set by Age group above.",
         )
     with wc4:
         ws_start_number = st.number_input(
@@ -518,11 +566,24 @@ if check_password():
             min_value=1, max_value=999, value=1,
             help="Use this to combine puzzles from different batches into one book without renumbering by hand.",
         )
-    ws_hard_mode = st.checkbox("Harder mode (backwards + diagonal words)", value=False)
+    ws_difficulty = st.selectbox(
+        "Word placement difficulty", list(WS_DIFFICULTIES.keys()), index=0, key="ws_difficulty",
+        help="Also auto-set by Age group above, but you can override it here.",
+    )
+    ws_directions = WS_DIFFICULTIES[ws_difficulty]
 
     bank_preview = [w.strip() for w in ws_word_bank.replace(",", "\n").splitlines() if w.strip()]
     if not bank_preview:
         st.warning("Add at least one word to the word bank to generate a puzzle.")
+
+    ws_pools, ws_insufficient = build_word_pools(bank_preview, int(ws_num_puzzles), int(ws_words_per_puzzle))
+    if bank_preview and ws_insufficient:
+        st.warning(
+            f"Your word bank has {len(set(w.strip().upper().replace(' ', '') for w in bank_preview if w.strip()))} "
+            f"unique word(s), but {int(ws_num_puzzles)} puzzles x {int(ws_words_per_puzzle)} words/puzzle needs "
+            f"{int(ws_num_puzzles) * int(ws_words_per_puzzle)} to guarantee no word repeats between puzzles. "
+            "Add more words to the bank above, or some words will repeat across puzzles."
+        )
 
     export_png = st.checkbox("Also export as PNG images (zipped, 300 DPI)", value=False)
 
@@ -533,7 +594,7 @@ if check_password():
             pdf_buf = build_activity_pdf(
                 page_w, page_h, theme,
                 include_cover, cover_title, cover_photo, photo_fill,
-                ws_word_bank, int(ws_num_puzzles), int(ws_words_per_puzzle), int(ws_grid_size), ws_hard_mode,
+                ws_pools, int(ws_grid_size), ws_directions,
                 show_answers, int(ws_start_number),
             )
             pdf_bytes = pdf_buf.getvalue()
